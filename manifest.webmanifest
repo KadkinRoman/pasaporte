@@ -1,0 +1,37 @@
+{
+  "name": "Pasaporte",
+  "short_name": "Pasaporte",
+  "lang": "ru",
+  "description": "Игра для изучения языков в поездках: аргентинский испанский и американский английский с нуля.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "orientation": "portrait",
+  "background_color": "#F3EBDD",
+  "theme_color": "#1E1F26",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
