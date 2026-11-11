@@ -293,6 +293,8 @@ h1, h2 { text-wrap: balance; margin: 0; }
 .w:hover { background: var(--surface-3); }
 .w-es { font-family: var(--f-disp); font-size: 20px; }
 .w-art { color: var(--teal); }
+.pp-tip { background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 6px; } .pp-tip p { margin: 0; } .pp-tip-b { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; } .pp-tip-b .btn { flex: 1 1 auto; } /* подсказка на старте */
+.tab.tab-fs { flex: 0 0 64px; } /* «Экран» в нижнем меню — узкий пункт */
 .w-noart { font-size: 15px; font-weight: 500; margin: 14px 0 0; }
 .w-tr { font-size: 14px; color: var(--muted); text-align: right; }
 .w-ru { grid-column: 1 / -1; font-size: 15px; }
@@ -740,6 +742,7 @@ button.psp-stamp:focus-visible { outline: 3px solid var(--teal, #2E6E6B); outlin
       <button class="tab" data-go="parada" id="tab-parada"></button>
       <button class="tab" data-go="repaso" id="tab-repaso"></button>
       <button class="tab" data-go="stats" id="tab-stats"></button>
+      <button class="tab tab-fs fs-btn" data-act="fs" id="tab-fs" hidden></button>
     </div>
   </nav>
   <button class="fab" id="fab" hidden></button>
@@ -1731,6 +1734,7 @@ function render() {
 function navH() { const n = $('.tabs'); if (n) document.documentElement.style.setProperty('--navh', Math.ceil(n.getBoundingClientRect().height) + 'px'); }
 addEventListener('resize', () => navH());
 function renderTabs() {
+  { const b = $('#tab-fs'); if (b) { b.hidden = !FULLSCR.ok(); b.innerHTML = fsTabHTML(); b.setAttribute('aria-label', FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'); } } /* «Экран» — полный экран на всех вкладках (владелец 2026-11-11) */
   const due = dueKeys().length;
   const tabs = { ruta: [mi(MI.map), T('Ruta')], parada: [mi(MI.place), T('Parada')], repaso: [mi(MI.style), T('Repaso')], stats: [mi(MI.insights), T('Progreso')] };
   for (const [k, [ic, txt]] of Object.entries(tabs)) {
@@ -1758,7 +1762,7 @@ function boleto() {
 function viewRuta() {
   const cur = S.detour ? -1 : LESSONS.findIndex((l, i) => lessonState(i) === 'open');
   const due = dueKeys().length;
-  return cabinHTML()
+  return installTipHTML() + cabinHTML()
     + (due ? `<button class="due" data-go="repaso">${ICON.cards}<span>Пора повторить: ${due} ${plural(due, 'карточка', 'карточки', 'карточек')}</span>→</button>` : '')
     + `<section><h2 class="sec map-sec">${T('Ruta')} · ${T('Argentina en bondi')}${ICON.filete}<button class="hint-btn map-q" data-act="map-hint" aria-label="Как читать карту">?</button></h2>${S.hints && S.hints.map ? '' : `<div class="map-hint"><p><b>${T('Cada parada es una lección.')}</b> ${T('Tocá la parada del bondi para jugarla. El borde del pin muestra sus tres partes: palabras, frases y charla.')}</p><p class="hint">Каждая остановка — урок. Нажми на остановку, у которой стоит автобус, чтобы его пройти. Контур вокруг пина показывает три части урока: слова, фразы и разговор.</p><button class="btn primary" data-act="map-hint-ok">${T('Entendido')}</button></div>`}${mapHTML(cur)}</section>`;
 }
@@ -2144,7 +2148,22 @@ const FULLSCR = {
   toggle() { try { const d = document.documentElement; if (FULLSCR.on()) (document.exitFullscreen || document.webkitExitFullscreen).call(document); else { const p = (d.requestFullscreen || d.webkitRequestFullscreen).call(d, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => toast('Браузер не разрешил полный экран')); } } catch { toast('Браузер не разрешил полный экран'); } },
   btn: () => FULLSCR.ok() ? `<button class="icon-btn fs-btn" data-act="fs" aria-label="${FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'}">${FULLSCR.on() ? ICON.fullOff : ICON.full}</button>` : ''
 };
-['fullscreenchange', 'webkitfullscreenchange'].forEach(e => document.addEventListener(e, () => { document.querySelectorAll('.fs-btn').forEach(b => { b.innerHTML = FULLSCR.on() ? ICON.fullOff : ICON.full; b.setAttribute('aria-label', FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'); }); const t = document.getElementById('fs-set'); if (t) t.textContent = FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'; }));
+const fsTabHTML = () => `<span class="ic">${FULLSCR.on() ? ICON.fullOff : ICON.full}</span><span>Экран</span>`;
+/* Подсказка на старте (владелец 2026-11-11: «для большего погружения установите приложение или выберите полноэкранный режим»).
+   Нет её в установленном приложении, после «Понятно» (localStorage, на этом устройстве) и там, где нельзя ни установить, ни развернуть (claude.ai без полного экрана). */
+const APP_MODE = (() => { try { return matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true; } catch { return false; } })();
+const ON_CLAUDE = /claude/.test(location.hostname);
+let INSTALL_EV = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EV = e; if (typeof view !== 'undefined' && view === 'ruta' && !LS && !MS && !RS) render(); });
+addEventListener('appinstalled', () => { INSTALL_EV = null; tipOff(); });
+function tipOff() { try { localStorage.setItem('pp-tip', '1'); } catch {} if (view === 'ruta' && !LS && !MS && !RS) render(); }
+function installTipHTML() {
+  if (APP_MODE || FULLSCR.on()) return ''; try { if (localStorage.getItem('pp-tip')) return ''; } catch {}
+  const site = !ON_CLAUDE, full = FULLSCR.ok(); if (!site && !full) return '';
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  return `<section class="pp-tip"><b>Для полного погружения</b>${site ? `<p>Установи игру как приложение: она будет открываться на весь экран, без строки адреса.</p><p class="hint">${ios ? 'iPhone: Safari → «Поделиться» → «На экран „Домой“».' : /Android/.test(navigator.userAgent) ? 'Android: Chrome → меню ⋮ → «Установить приложение» (или «Добавить на главный экран»).' : 'Компьютер: значок установки справа в адресной строке Chrome или Edge. На телефоне: Chrome → меню ⋮ → «Установить приложение».'}</p>` : ''}${full ? `<p>${site ? 'Или включи' : 'Включи'} полноэкранный режим — кнопка «Экран» внизу${site ? '' : ' или здесь'}.</p>` : ''}<div class="pp-tip-b">${site && INSTALL_EV ? '<button class="btn primary" data-act="install">Установить</button>' : ''}${full ? '<button class="btn tonal" data-act="fs">Во весь экран</button>' : ''}<button class="btn ghost" data-act="tip-off">Понятно</button></div></section>`;
+}
+['fullscreenchange', 'webkitfullscreenchange'].forEach(e => document.addEventListener(e, () => { if (typeof view !== 'undefined' && view === 'ruta' && !LS && !MS && !RS) render(); document.querySelectorAll('.fs-btn').forEach(b => { b.innerHTML = b.classList.contains('tab') ? fsTabHTML() : FULLSCR.on() ? ICON.fullOff : ICON.full; b.setAttribute('aria-label', FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'); }); const t = document.getElementById('fs-set'); if (t) t.textContent = FULLSCR.on() ? 'Выйти из полного экрана' : 'Во весь экран'; }));
 const ART_RE = IS_US ? /^(a|an|the) /i : /^(el|la|los|las|un|una|unos|unas) /i;
 const artEs = es => esc(es).replace(ART_RE, '<span class="w-art">$1</span> ');
 function introView() {
@@ -3853,7 +3872,7 @@ function closeModal() {
 }
 function renderModal() {
   const el = $('#modal'); let title = MD_TITLE[MS.kind] || ''; if (MS.kind === 'game' && GAMES[MS.game]) title = GAMES[MS.game].es;
-  el.innerHTML = `<div class="ls-top"><button class="icon-btn" data-act="md-close" aria-label="Закрыть">${ICON.close}</button><h2 class="md-title">${esc(title)}</h2>${mangoHTML(S.mangos, 'wallet mini')}${estHTML('wallet mini est')}</div><div class="ls-body" id="mdb"></div><div class="ls-foot" id="mdf"></div>`;
+  el.innerHTML = `<div class="ls-top"><button class="icon-btn" data-act="md-close" aria-label="Закрыть">${ICON.close}</button><h2 class="md-title">${esc(title)}</h2>${mangoHTML(S.mangos, 'wallet mini')}${estHTML('wallet mini est')}${FULLSCR.btn()}</div><div class="ls-body" id="mdb"></div><div class="ls-foot" id="mdf"></div>`;
   ({ kiosco: () => kioskStart(false), tienda: mdTienda, museo: mdMuseo, juegos: mdJuegos, media: mdMedia, charla: () => chatStart(false, MS.c), historia: () => storyStart(false), reglas: mdReglas, pron: pronStart, game: mdGame, mirador: mdMirador, cierre: mdCierre })[MS.kind]();
 }
 
@@ -4359,6 +4378,8 @@ document.addEventListener('click', e => {
   if (ds.grade) { grade(+ds.grade); return; }
   switch (ds.act) {
     case 'fs': FULLSCR.toggle(); return;
+    case 'tip-off': tipOff(); return;
+    case 'install': if (INSTALL_EV) { const ev = INSTALL_EV; INSTALL_EV = null; ev.prompt(); ev.userChoice.then(r => { if (r && r.outcome === 'accepted') tipOff(); else render(); }).catch(() => {}); } return;
     case 'quit':
       if (!LS) return;
       if (LS.phase === 'done' || LS.phase === 'wrong') return closeLesson();
