@@ -4915,9 +4915,16 @@ document.addEventListener('pointerdown', e => {
     ticket.style.setProperty('--stub-shift', dx + 'px');
     ticket.style.setProperty('--cover-shift', -Math.min(dx * 2, ticket.clientWidth * .8) + 'px');
   };
+  stub.onpointerup = up => {
+    if (up.pointerId !== e.pointerId || up.clientX - start < 24) return;
+    ticket.click();
+    const ignoreClick = event => event.stopImmediatePropagation();
+    ticket.addEventListener('click', ignoreClick, { capture:true, once:true });
+    setTimeout(() => ticket.removeEventListener('click', ignoreClick, true), 0);
+  };
   stub.onlostpointercapture = () => {
     ticket.classList.remove('psp-dragging');
-    stub.onpointermove = stub.onlostpointercapture = null;
+    stub.onpointermove = stub.onpointerup = stub.onlostpointercapture = null;
   };
 });
 document.addEventListener('click', e => {
