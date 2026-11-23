@@ -101,7 +101,7 @@ details > summary { cursor:pointer }
 <header><div class="mast"><span class="brand" lang="es">Pasaporte</span><span class="mast-rule" aria-hidden="true"></span></div><h1>Меню поездок</h1></header>
 <div class="toolbar">
 <nav aria-label="Вариант меню"><a href="#all">Все три</a><a href="#panoramas">Вывески</a><a href="#tickets">Билеты</a><a href="#board">Табло</a></nav>
-<label class="art-switch" hidden>Иллюстрации <select><option value="">ImageGen</option><option value="gemini-">Gemini</option></select></label>
+<label class="art-switch">Иллюстрации <select><option value="">ImageGen</option><option value="original-">Gemini · исходные баннеры</option></select></label>
 </div>
 <main>
 <section id="panoramas"><h2>Панорамные вывески</h2><p class="instruction">Нажмите на вывеску, чтобы открыть маршрут.</p><div class="trip-stack" id="signs"></div></section>
@@ -178,7 +178,7 @@ function available(src) {
     img.onload=()=>resolve(img.naturalWidth>0); img.onerror=()=>resolve(false); img.src=src;
   });
 }
-Promise.all(trips.map(t=>available('gemini-'+t.key+'.webp'))).then(ok=>{ artSwitch.hidden=!ok.every(Boolean); });
+Promise.all(trips.map(t=>available('gemini-'+t.key+'.webp'))).then(ok=>{ if(ok.every(Boolean)) artSwitch.querySelector('select').add(new Option('Gemini · новый автобус','gemini-')); });
 artSwitch.querySelector('select').addEventListener('change',e=>{
   for(const img of document.querySelectorAll('[data-art]')) img.src=e.target.value+img.dataset.art+'.webp';
 });
