@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f0dd">
+<title>Pasaporte — меню поездок</title>
+<style>
+:root { color-scheme:light; --paper:#f8f1df; --ink:#242a27; --faded:#5c5a4e; --red:#963d30; --green:#254a44; --line:#c9bda4; --serif:Georgia,"Times New Roman",serif; --sans:"Segoe UI",Arial,sans-serif; --mono:Consolas,"Courier New",monospace }
+* { box-sizing:border-box }
+body { margin:0; min-height:100vh; color:var(--ink); font:16px/1.4 var(--sans); background-color:var(--paper); background-image:radial-gradient(#9b795024 .6px,transparent .8px); background-size:4px 4px }
+button,a { color:inherit; font:inherit; -webkit-tap-highlight-color:transparent }
+button { cursor:pointer }
+button:focus-visible,a:focus-visible { outline:3px solid #096fbb; outline-offset:4px }
+button:disabled { cursor:default }
+[hidden] { display:none!important }
+.shell { max-width:1600px; margin:auto; padding:0 clamp(16px,3.6vw,64px) 64px }
+header { padding:28px 0 26px; border-bottom:2px solid var(--ink) }
+.mast { display:flex; align-items:center; gap:12px }
+.brand { font:bold italic 24px/.95 var(--serif); letter-spacing:-1.5px }
+.mast-rule { flex:1; height:4px; border-block:1px solid var(--line) }
+h1 { margin:22px 0 0; font:normal clamp(41px,6.2vw,85px)/1.02 var(--serif); letter-spacing:-.065em }
+.toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 0 }
+nav { display:flex; gap:4px; flex-wrap:wrap }
+nav a { display:grid; place-items:center; min-height:44px; padding:7px 14px; color:#47463d; text-decoration:none; border-radius:3px; font-size:14px; font-weight:600 }
+nav a:hover { background:#e9dfc9 }
+nav a[aria-current] { background:var(--ink); color:#fff8e8 }
+.art-switch { display:inline-flex; align-items:center; gap:8px; color:var(--faded); font-size:14px }
+.art-switch select { min-height:44px; font:inherit; color:var(--ink); padding:6px; background:var(--paper); border:1px solid var(--line) }
+main { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:clamp(16px,2.3vw,38px); align-items:start; margin-top:12px }
+main.focused { grid-template-columns:minmax(0,820px); justify-content:center }
+section { min-width:0; container-type:inline-size }
+section h2 { margin:0; padding-top:14px; border-top:1px solid var(--ink); font:normal clamp(24px,5.9cqw,36px)/1.12 var(--serif); letter-spacing:-.045em }
+.instruction { color:var(--faded); margin:6px 0 19px; font-size:14px; line-height:1.45 }
+.trip-stack { display:grid; gap:16px }
+.trip { width:100%; text-align:left; border:0; padding:0; background:none; position:relative; display:block }
+.trip:focus-visible { z-index:2 }
+.scene { display:block; width:100%; height:auto; aspect-ratio:128/23; object-fit:cover; image-rendering:pixelated }
+.info { font-size:clamp(12px,3.2cqw,15px); color:var(--faded); line-height:1.35 }
+.counter { white-space:nowrap }
+details > summary { cursor:pointer }
+.icon { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:50%; font:22px/1 var(--sans) }
+.view { overflow:hidden; border:2px solid #363e37; border-radius:6px; background:#f2e9d3; box-shadow:0 3px 0 #ac9f84 }
+.view .land { position:relative; display:block; isolation:isolate; overflow:hidden; background:#394e4c }
+.view .scene { height:auto; transition:filter .25s; object-fit:contain }
+.view:hover .scene,.view[aria-expanded="true"] .scene { filter:saturate(1.13) brightness(1.05) }
+.plaque { position:absolute; top:6%; left:49%; transform:translateX(-50%) rotate(-2deg); display:grid; text-align:center; padding:4px clamp(8px,2.6cqw,24px) 6px; color:#fff4ce; background:#244740; box-shadow:0 2px 0 #111b1c; border:2px solid #e6cca0; outline:2px solid #393a2d; transition:transform .23s }
+.plaque:before,.plaque:after { content:""; position:absolute; top:-10px; height:10px; width:2px; background:#494735 }
+.plaque:before { left:13% }.plaque:after { right:13% }
+.view.ar .plaque { transform:translateX(-50%) rotate(2deg); background:#773f37 }
+.view:hover .plaque,.view[aria-expanded="true"] .plaque { transform:translateX(-50%) rotate(0) }
+.destination { display:block; font:bold clamp(10px,2.4cqw,15px)/1.2 var(--mono); letter-spacing:.1em; text-transform:uppercase }
+.plaque strong { font: bold clamp(19px,5.3cqw,43px)/1.1 var(--serif); letter-spacing:-.045em; white-space:nowrap }
+.view-foot { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:9px 12px; color:#393a32; font-size:clamp(13px,3.4cqw,16px) }
+.view-foot .icon { color:var(--green); border:1px solid #a39982; flex:none }
+.view[aria-expanded=true] .icon { transform:rotate(90deg) }
+.view-description { display:block; padding:0 12px 12px; color:var(--faded); font:14px/1.45 var(--sans) }
+.ticket { display:block; isolation:isolate; overflow:hidden; min-height:clamp(126px,31cqw,177px); border:1px solid #a68e67; border-radius:6px; background:#273e3a; box-shadow:0 2px 0 #beae90 }
+.ticket .scene { position:absolute; inset:0; height:100%; object-fit:cover }
+.ticket-cover,.stub { position:absolute; top:0; bottom:0; transition:transform .5s cubic-bezier(.22,.72,.25,1); }
+.ticket-cover { left:0; width:78%; background:#f5e4c4; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:5px; padding:10px 4%; color:#452e23; border-block:5px solid #974e39 }
+.ticket.ar .ticket-cover { background:#e2e7d4; color:#293f38; border-color:#426a60 }
+.ticket-cover .destination { color:var(--red) }.ticket.ar .ticket-cover .destination { color:var(--green) }
+.ticket-cover strong { font:italic bold clamp(29px,7.8cqw,55px)/1.02 var(--serif); letter-spacing:-.075em }
+.ticket-cover .info { margin-top:5px; color:#4d493d }
+.stub { width:22%; right:0; border-left:2px dashed #8d6b49; display:flex; align-items:center; flex-direction:column; justify-content:center; gap:8px; background:#ddb887; color:#493321; box-shadow:-2px 0 3px #57331b22; transform-origin:50% 90% }
+.ticket.ar .stub { background:#afc2a9; color:#2c4838; border-color:#637d65 }
+.stub:before,.stub:after { content:""; position:absolute; width:14px; height:14px; background:var(--paper); border-radius:50%; left:-8px }
+.stub:before { top:-9px }.stub:after { bottom:-9px }
+.barcode { height:26px; width:55%; max-width:65px; background:repeating-linear-gradient(90deg,currentColor 0 2px,transparent 2px 3px,currentColor 3px 4px,transparent 4px 6px,currentColor 6px 9px,transparent 9px 12px); opacity:.9 }
+.tear { font:bold clamp(9px,2.15cqw,13px)/1.2 var(--mono); text-transform:uppercase; letter-spacing:.03em }
+.ticket:hover:not([aria-expanded=true]) .stub { transform:translateX(5px) rotate(2deg) }
+.ticket.dragging .ticket-cover { transition:none; transform:translateX(var(--cover-shift)) }
+.ticket.dragging .stub { transition:none; transform:translateX(var(--stub-shift)) }
+.ticket[aria-expanded=true] .ticket-cover { transform:translateX(-104%) rotate(-2deg) }
+.ticket[aria-expanded=true] .stub { transform:translateX(112%) rotate(7deg) }
+.ticket-reveal { position:absolute; left:8px; bottom:6px; display:flex; align-items:center; gap:6px; background:#182722dc; color:white; border:1px solid #f8ebcead; border-radius:2px; padding:3px 7px; font:600 12px/1.3 var(--sans) }
+.departures { border:5px solid #474b40; padding:12px 10px; border-radius:7px; box-shadow:inset 0 0 0 1px #929383,0 3px 0 #a7997e; background:#202b29; color:#f5dc95 }
+.board-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #66716a; color:#e7e5d6; font:bold clamp(13px,3.15cqw,20px)/1.3 var(--mono); text-transform:uppercase; letter-spacing:.15em }
+.board-heading:before,.board-heading:after { content:""; width:5px; height:5px; border-radius:50%; background:#a9ae95 }
+.board-row { padding:10px 8px; display:flex; justify-content:space-between; align-items:center; color:#ffdc7b; border:1px solid #505b50; background:repeating-linear-gradient(#28352e 0px,#28352e 3px,#253128 4px); border-radius:2px }
+.board-row .destination { color:#cdd5bd; font-size:clamp(10px,2.45cqw,14px); letter-spacing:.11em }
+.board-row strong { display:block; margin:4px 0 0; font:bold clamp(20px,5.1cqw,35px)/1.13 var(--mono); text-transform:uppercase; letter-spacing:.035em }
+.board-row .icon { width:28px; height:28px; font:24px/1 var(--mono); color:#cbd7bd }
+.board-row:hover,.board-row[aria-expanded=true] { border-color:#cbb576 }
+.board-row[aria-expanded=true] .icon { transform:rotate(45deg) }
+.board-panel { visibility:hidden; display:grid; grid-template-rows:0fr; transition:grid-template-rows .3s,visibility .3s }
+.board-panel.open { visibility:visible; grid-template-rows:1fr }
+.board-panel > div { overflow:hidden }
+.board-panel .scene { margin-top:5px }
+.board-panel .info { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; padding:8px 2px; color:#dedfcf; font-size:12px }
+.board-trip+.board-trip { margin-top:6px }
+@media (min-width:1100px) { main:not(.focused) .instruction { min-height:2.9em } }
+@media (max-width:1099px) { main { grid-template-columns:minmax(0,760px); justify-content:center; gap:36px } }
+@media (max-width:540px) { header { padding:20px 0 17px } h1 { margin-top:17px } .toolbar { padding:10px 0 } nav { gap:1px } nav a { padding:7px 9px; font-size:13px } main { margin-top:8px } .instruction { margin-bottom:13px } }
+@media (prefers-reduced-motion:reduce) { *,*:before,*:after { transition:none!important; scroll-behavior:auto!important } }
+</style>
+</head>
+<body>
+<div class="shell">
+<header><div class="mast"><span class="brand" lang="es">Pasaporte</span><span class="mast-rule" aria-hidden="true"></span></div><h1>Меню поездок</h1></header>
+<div class="toolbar">
+<nav aria-label="Вариант меню"><a href="#all">Все три</a><a href="#panoramas">Вывески</a><a href="#tickets">Билеты</a><a href="#board">Табло</a></nav>
+<label class="art-switch" hidden>Иллюстрации <select><option value="">ImageGen</option><option value="gemini-">Gemini</option></select></label>
+</div>
+<main>
+<section id="panoramas"><h2>Панорамные вывески</h2><p class="instruction">Нажмите на вывеску, чтобы открыть маршрут.</p><div class="trip-stack" id="signs"></div></section>
+<section id="tickets"><h2>Посадочные билеты</h2><p class="instruction">Нажмите на корешок или сдвиньте его вправо, чтобы увидеть панораму.</p><div class="trip-stack" id="coupons"></div></section>
+<section id="board"><h2>Табло автостанции</h2><p class="instruction">Выберите направление на табло, чтобы увидеть маршрут.</p><div class="departures"><div class="board-heading">Отправления</div><div id="rows"></div></div></section>
+</main>
+<noscript>Для интерактивного сравнения включите JavaScript.</noscript>
+</div>
+<script>
+const trips = [
+  { key:'ny', alt:'Путешественник и автобус у Бруклинского моста на закате', country:'Америка', place:'Нью-Йорк', language:'Американский английский', route:'От Нью-Йорка до Калифорнии' },
+  { key:'ar', alt:'Путешественник на остановке у озера в Патагонии, справа ждёт автобус', country:'Аргентина', place:'Патагония', language:'Аргентинский испанский', route:'От Буэнос-Айреса до Ушуайи' }
+];
+function scene(t) { return '<img class="scene" src="'+t.key+'.webp" data-art="'+t.key+'" width="1280" height="230" alt="'+t.alt+'">'; }
+function label(t) { return '<span class="destination">'+t.place+'</span><strong>'+t.country+'</strong>'; }
+function setExpanded(button, state) { button.setAttribute('aria-expanded', String(state)); }
+for (const t of trips) {
+  const names = t.country+' · '+t.place;
+  const signs=document.querySelector('#signs'), coupons=document.querySelector('#coupons'), rows=document.querySelector('#rows');
+  signs.insertAdjacentHTML('beforeend','<button class="view trip '+t.key+'" type="button" aria-expanded="false" aria-controls="route-'+t.key+'" aria-label="'+names+' — маршрут"><span class="land">'+scene(t)+'<span class="plaque">'+label(t)+'</span></span><span class="view-foot"><span>'+t.language+'</span><span class="icon" aria-hidden="true">›</span></span><span class="view-description" id="route-'+t.key+'" hidden>'+t.route+' · 16 остановок</span></button>');
+  const sign=signs.lastElementChild, details=sign.querySelector('.view-description');
+  sign.onclick=()=>{ details.hidden=!details.hidden; setExpanded(sign,!details.hidden); };
+
+  coupons.insertAdjacentHTML('beforeend','<button class="ticket trip '+t.key+'" type="button" aria-expanded="false" aria-label="'+names+' — раскрыть или закрыть билет">'+scene(t)+'<span class="ticket-reveal">'+t.place+' · Свернуть ↶</span><span class="ticket-cover">'+label(t)+'<span class="info">'+t.language+'</span></span><span class="stub" aria-hidden="true"><span class="barcode"></span><span class="tear">Открыть ›</span></span></button>');
+  const ticket=coupons.lastElementChild; let down=null, swiped=false;
+  ticket.onclick=()=>{ if(swiped){swiped=false;return;} setExpanded(ticket,ticket.getAttribute('aria-expanded')!=='true'); };
+  const stub=ticket.querySelector('.stub');
+  stub.style.touchAction='pan-y';
+  stub.onpointerdown=e=>{ down=e.clientX; swiped=false; stub.setPointerCapture(e.pointerId); };
+  stub.onpointermove=e=>{
+    if(down===null) return;
+    const distance=Math.max(0,e.clientX-down);
+    if(distance<4 && !ticket.classList.contains('dragging')) return;
+    ticket.style.setProperty('--stub-shift',distance+'px');
+    ticket.style.setProperty('--cover-shift',-Math.min(ticket.clientWidth*.8,distance*2)+'px');
+    ticket.classList.add('dragging');
+  };
+  stub.onpointerup=e=>{
+    if(down!==null && ticket.classList.contains('dragging')){
+      setExpanded(ticket,e.clientX-down>25); swiped=true; setTimeout(()=>{swiped=false;},0);
+    }
+    down=null; ticket.classList.remove('dragging');
+  };
+  stub.onpointercancel=()=>{down=null;swiped=false;ticket.classList.remove('dragging');};
+
+  rows.insertAdjacentHTML('beforeend','<div class="board-trip"><button class="board-row trip" type="button" aria-expanded="'+(t.key==='ny')+'" aria-controls="departure-'+t.key+'" aria-label="'+names+' — панорама"><span>'+label(t)+'</span><span class="icon" aria-hidden="true">+</span></button><div class="board-panel'+(t.key==='ny'?' open':'')+'" id="departure-'+t.key+'" aria-hidden="'+(t.key!=='ny')+'"><div>'+scene(t)+'<div class="info"><span>'+t.language+'</span><span class="counter">16 остановок</span></div></div></div></div>');
+}
+document.querySelector('#rows').addEventListener('click', e=>{
+  const button=e.target.closest('.board-row'); if(!button) return;
+  const expand=button.getAttribute('aria-expanded')!=='true';
+  for(const row of document.querySelectorAll('.board-row')){
+    const state=row===button && expand, panel=row.nextElementSibling;
+    setExpanded(row,state); panel.classList.toggle('open',state); panel.setAttribute('aria-hidden',String(!state));
+  }
+});
+const options=['all','panoramas','tickets','board'];
+function route() {
+  const id=options.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'all';
+  document.querySelector('main').classList.toggle('focused',id!=='all');
+  for(const section of document.querySelectorAll('main section')) section.hidden=id!=='all' && section.id!==id;
+  for(const a of document.querySelectorAll('nav a')) {
+    if(a.hash==='#'+id) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current');
+  }
+}
+document.querySelector('nav').addEventListener('click',e=>{
+  const a=e.target.closest('a'); if(!a || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  e.preventDefault(); if(location.hash!==a.hash) history.pushState(null,'',a.hash); route(); window.scrollTo({top:0});
+});
+window.addEventListener('hashchange',route); window.addEventListener('popstate',route); route();
+const artSwitch=document.querySelector('.art-switch');
+function available(src) {
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>resolve(img.naturalWidth>0); img.onerror=()=>resolve(false); img.src=src;
+  });
+}
+Promise.all(trips.map(t=>available('gemini-'+t.key+'.webp'))).then(ok=>{ artSwitch.hidden=!ok.every(Boolean); });
+artSwitch.querySelector('select').addEventListener('change',e=>{
+  for(const img of document.querySelectorAll('[data-art]')) img.src=e.target.value+img.dataset.art+'.webp';
+});
+</script>
+</body>
+</html>
