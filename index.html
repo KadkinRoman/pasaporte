@@ -1,4 +1,257 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Pasaporte — игра для изучения языков в поездках: аргентинский испанский и американский английский с нуля."><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#1E1F26"><link rel="icon" type="image/png" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Pasaporte"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}@media (display-mode: fullscreen),(display-mode: standalone){.fs-btn,#fs-set,#fs-set+.hint{display:none!important}}</style></head><body><title>Pasaporte</title>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Pasaporte — игра для изучения языков в поездках: аргентинский испанский и американский английский с нуля."><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#1E1F26"><link rel="icon" type="image/png" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Pasaporte"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}@media (display-mode: fullscreen),(display-mode: standalone){.fs-btn,#fs-set,#fs-set+.hint{display:none!important}}</style></head><body><style>#device-link {
+  box-sizing: border-box;
+  width: min(28rem, calc(100% - 2rem));
+  max-height: 86dvh;
+  overflow: auto;
+  padding: 1.25rem;
+  border: 2px solid var(--ink);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--ink);
+}
+#device-link::backdrop { background: rgb(12 17 24 / 65%); }
+#device-link h2 { margin: 0 0 .75rem; font-size: 1.35rem; }
+#device-link p { margin: .65rem 0; line-height: 1.45; }
+#device-link form { border-top: 1px solid var(--outline); padding-top: 1rem; margin-top: 1rem; }
+#device-link label { display: block; font-weight: 600; }
+#device-link input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: .6rem;
+  margin: .35rem 0 .65rem;
+  border: 1px solid var(--outline);
+  border-radius: .5rem;
+  background: var(--surface);
+  color: inherit;
+  font: 1rem monospace;
+}
+#device-link .btn { min-height: 44px; }
+#device-link [role=status]:empty { display: none; }
+#device-link [data-device-close] { margin-top: .8rem; }
+</style><script data-progress-api="https://46-226-160-99.sslip.io/pasaporte-api/progress">/* У одного профиля общий секретный код на всех устройствах. В URL он не передаётся. */
+(() => {
+  'use strict';
+  const endpoint = document.currentScript.dataset.progressApi;
+  const gameKey = 'castellano-porteno-v1';
+  const profileKey = 'pasaporte-linked-profile:' + endpoint;
+  const validCode = value => /^[0-9a-f]{64}$/.test(value);
+  let linked;
+  try { linked = localStorage.getItem(profileKey); } catch { return; }
+  window.pasaporteDevices = true;
+
+  function temporaryError() {
+    return Object.assign(new Error('Сервер пока недоступен. Проверьте подключение и попробуйте снова.'), { code: 'unavailable' });
+  }
+  async function request(code, write) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const headers = { Authorization: 'Bearer ' + code };
+      if (write) headers['Content-Type'] = 'application/json';
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: write ? 'PUT' : 'GET', headers, body: write ? JSON.stringify(write) : undefined,
+          cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: controller.signal
+        });
+      } catch { throw temporaryError(); }
+      if (response.status === 429 || response.status >= 500) throw temporaryError();
+      if (!response.ok && response.status !== 409) {
+        throw new Error('Сервер отклонил запрос. Проверьте код или попробуйте позже.');
+      }
+      let data;
+      try { data = await response.json(); } catch { throw temporaryError(); }
+      if (!data || !Number.isSafeInteger(data.revision) || data.revision < 0 ||
+          ((!write || response.status === 409) && !(data.state === null || (data.state && typeof data.state === 'object' && !Array.isArray(data.state))))) {
+        throw temporaryError();
+      }
+      return { data, conflict: response.status === 409 };
+    } finally { clearTimeout(timer); }
+  }
+
+  function documentRef(code) {
+    // Последовательные запросы: запоздавший GET не может отменить подтверждение более нового PUT.
+    let queue = Promise.resolve(), revision = -1, last = null, listener, polling = false;
+    function serial(fn) {
+      const next = queue.then(() => {
+        if (localStorage.getItem(profileKey) !== code) throw new Error('Профиль изменился на другой вкладке.');
+        return fn();
+      });
+      queue = next.catch(() => {});
+      return next;
+    }
+    function receive(version, state) {
+      const changed = version !== revision;
+      revision = version;
+      last = { exists: state !== null, data: () => state, metadata: { fromCache: false, hasPendingWrites: false } };
+      if (changed && listener) listener(last);
+      return last;
+    }
+    function get() {
+      return serial(async () => {
+        const { data } = await request(code);
+        return receive(data.revision, data.state);
+      });
+    }
+    async function poll() {
+      if (polling || document.hidden) return;
+      polling = true;
+      try { await get(); } catch { /* Следующий опрос или событие online повторит запрос. */ }
+      finally { polling = false; }
+    }
+    return {
+      get,
+      onSnapshot(next) {
+        listener = next;
+        if (last) next(last);
+        poll();
+        const timer = setInterval(poll, 15000);
+        window.addEventListener('online', poll);
+        document.addEventListener('visibilitychange', poll);
+        return () => {
+          clearInterval(timer); listener = null;
+          window.removeEventListener('online', poll); document.removeEventListener('visibilitychange', poll);
+        };
+      },
+      set(state) {
+        // Версия фиксируется при вызове set, до любого ожидающего ответа GET.
+        const expected = revision;
+        return serial(async () => {
+          if (!last || expected !== revision) throw temporaryError();
+          const { data, conflict } = await request(code, { revision: expected, state });
+          if (conflict) {
+            receive(data.revision, data.state);
+            // Подтверждение PUT могло потеряться после сохранения на сервере.
+            if (state.syncRev && data.state?.syncRev === state.syncRev && data.state.updatedAt === state.updatedAt) return;
+            throw temporaryError();
+          }
+          receive(data.revision, state);
+        });
+      }
+    };
+  }
+
+  if (validCode(linked)) {
+    const ref = documentRef(linked);
+    window.pasaporteCloud = {
+      async use(name) {
+        if (name === 'user') return { id: async () => 'linked-profile' };
+        if (name === 'db') return { doc: () => ref };
+        return null;
+      }
+    };
+  }
+  window.addEventListener('storage', event => {
+    if (event.key === profileKey && event.newValue !== linked) location.reload();
+  });
+
+  function openDialog() {
+    if (document.getElementById('device-link')) return;
+    const dialog = document.createElement('dialog');
+    dialog.id = 'device-link';
+    dialog.setAttribute('aria-labelledby', 'device-link-title');
+    dialog.innerHTML = `<h2 id="device-link-title">Прогресс на двух устройствах</h2>
+      <section data-device-setup>
+        <p>На устройстве с вашим прогрессом создайте код. На втором откройте эту же игру и введите его.</p>
+        <button type="button" class="btn primary" data-device-create>Создать код для моего прогресса</button>
+        <form data-device-form>
+          <label>Код с другого устройства<input data-device-input autocomplete="off" spellcheck="false" autocapitalize="none" type="password" required></label>
+          <button class="btn tonal" data-device-join>Проверить код</button>
+        </form>
+      </section>
+      <section data-device-review hidden>
+        <p data-device-summary></p>
+        <p>Прогресс этого браузера будет заменён данными с первого устройства.</p>
+        <button type="button" class="btn primary" data-device-confirm>Загрузить и связать устройства</button>
+      </section>
+      <section data-device-linked hidden>
+        <p>Этот браузер связан. Введите его код на другом устройстве, чтобы продолжить поездку.</p>
+        <button type="button" class="btn tonal" data-device-reveal>Показать код</button>
+        <div data-device-share hidden>
+          <label>Код доступа к вашему прогрессу<input data-device-code readonly spellcheck="false"></label>
+          <button type="button" class="btn tonal" data-device-copy>Скопировать код</button>
+          <p class="hint">Храните код у себя. Он разрешает читать и изменять прогресс.</p>
+        </div>
+      </section>
+      <p role="status" data-device-status></p>
+      <button type="button" class="btn ghost" data-device-close>Закрыть</button>`;
+    document.body.append(dialog);
+    const find = name => dialog.querySelector('[data-device-' + name + ']');
+    let candidate, busy = false;
+    function status(text) { find('status').textContent = text; }
+    async function act(fn) {
+      if (busy) return;
+      busy = true; status('Подключаюсь…');
+      const buttons = [...dialog.querySelectorAll('button')];
+      buttons.forEach(b => { b.disabled = true; });
+      try { await fn(); } catch (error) { status(error.message || 'Сохранение не удалось.'); }
+      finally { busy = false; buttons.forEach(b => { b.disabled = false; }); }
+    }
+    const attach = (code, state, loadRemote) => {
+      const serialized = JSON.stringify(state);
+      const keys = [gameKey, gameKey + '-base', gameKey + '-parent', profileKey];
+      const previous = keys.map(key => localStorage.getItem(key));
+      try {
+        localStorage.removeItem(gameKey + '-parent');
+        localStorage.setItem(gameKey + '-base', serialized);
+        if (loadRemote) localStorage.setItem(gameKey, serialized);
+        localStorage.setItem(profileKey, code);
+      } catch {
+        for (const key of keys) localStorage.removeItem(key);
+        keys.forEach((key, i) => { if (previous[i] !== null) localStorage.setItem(key, previous[i]); });
+        throw new Error('Не удалось сохранить профиль на устройстве. Проверьте доступное место в браузере.');
+      }
+      location.reload();
+    };
+    find('setup').hidden = !!window.pasaporteCloud;
+    find('linked').hidden = !window.pasaporteCloud;
+    find('create').onclick = () => act(async () => {
+      const code = Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
+      const state = JSON.parse(localStorage.getItem(gameKey) || '{"v":7,"trip":"ar","updatedAt":0}');
+      const { conflict } = await request(code, { revision: 0, state });
+      if (conflict) throw temporaryError();
+      // Между нажатием и ответом прогресс мог обновиться, например, в соседней вкладке.
+      attach(code, state, false);
+    });
+    find('form').onsubmit = event => {
+      event.preventDefault();
+      act(async () => {
+        const code = find('input').value.trim().toLowerCase();
+        if (!validCode(code)) throw new Error('Введите код целиком: 64 символа.');
+        const { data } = await request(code);
+        if (!data.state) throw new Error('Профиль с таким кодом не найден.');
+        candidate = code;
+        const ar = Object.keys(data.state.lessons || {}).length;
+        const us = Object.keys(data.state.trips?.us?.lessons || {}).length;
+        find('summary').textContent = 'Остановок пройдено: Аргентина — ' + ar + ', США — ' + us + '.';
+        find('setup').hidden = true; find('review').hidden = false; status('');
+        find('confirm').focus();
+      });
+    };
+    find('confirm').onclick = () => act(async () => {
+      const { data } = await request(candidate);
+      if (!data.state) throw new Error('Сохранение недоступно. Проверьте код.');
+      attach(candidate, data.state, true);
+    });
+    find('reveal').onclick = () => {
+      find('share').hidden = false; find('reveal').hidden = true; find('code').value = linked;
+    };
+    find('copy').onclick = async () => {
+      try { await navigator.clipboard.writeText(linked); status('Код скопирован.'); }
+      catch { find('code').focus(); find('code').select(); status('Скопируйте выделенный код.'); }
+    };
+    find('close').onclick = () => dialog.close();
+    dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.showModal();
+  }
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('[data-link-devices]')) openDialog();
+  });
+})();
+</script><title>Pasaporte</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1412,11 +1665,11 @@ if (TRIP && TRIP.partes) PARTES.forEach(p => Object.assign(p, TRIP.partes[p.id] 
 const partsOf = id => S.parts[id] || {};
 const nextPart = id => PARTES.find(p => !partsOf(id)[p.id]) || null;
 const partsDone = id => PARTES.filter(p => partsOf(id)[p.id]).length;
-const DEF = () => ({ v: 7, xp: 0, mangos: 0, estrellas: 0, energy: 100, mood: 70, seen: 0, lessons: {}, cards: {}, days: {}, ach: {}, reviews: 0, tramo: 1, detour: null, parts: {}, miradores: {},
+const DEF = () => ({ v: 7, xp: 0, mangos: 0, estrellas: 0, energy: 100, mood: 70, seen: 0, lessons: {}, cards: {}, practice: {}, days: {}, ach: {}, reviews: 0, tramo: 1, detour: null, parts: {}, miradores: {},
   inv: {}, lugar: { ventana: '', luz: '', asiento: '', cama: '' }, outfit: { skin: 0, hair: 'corto', hairc: 0, topc: 4, top: '', hat: '', face: '', neck: '', hand: '', mascota: '' }, postales: {}, media: {}, games: {},
   charlas: 0, bought: 0, breaks: 0, gamesWon: 0, stories: 0, pron: 0, freezes: 0, frozen: {}, settings: { voice: '', rec: true, slow: false, sound: true, goal: 50, dir: 'es', nivel: 'facil' }, trip: 'ar', trips: {}, updatedAt: 0 });
 /* Поля прогресса одной поездки: в S лежит активная, остальные — в S.trips[id]. Кошелёк, силы, вещи, питомец, дни серии — общие */
-const TRIP_KEYS = ['xp', 'lessons', 'cards', 'reviews', 'tramo', 'detour', 'parts', 'miradores', 'postales', 'ach', 'seen', 'media'];
+const TRIP_KEYS = ['xp', 'lessons', 'cards', 'practice', 'reviews', 'tramo', 'detour', 'parts', 'miradores', 'postales', 'ach', 'seen', 'media'];
 function normalize(o) {
   const d = DEF();
   if (!o || typeof o !== 'object') return d;
@@ -1425,7 +1678,7 @@ function normalize(o) {
   if (!['es', 'ru', 'mix'].includes(s.settings.dir)) s.settings.dir = DEF().settings.dir; /* 2026-11-10: тап по герою записывал сюда R/L (data-dir у сцены) */
   s.outfit = Object.assign(DEF().outfit, o.outfit || {});
   s.lugar = Object.assign(DEF().lugar, o.lugar || {});
-  for (const k of ['lessons', 'cards', 'days', 'ach', 'inv', 'postales', 'media', 'games', 'frozen', 'parts', 'miradores', 'trips']) if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
+  for (const k of ['lessons', 'cards', 'practice', 'days', 'ach', 'inv', 'postales', 'media', 'games', 'frozen', 'parts', 'miradores', 'trips']) if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
   s.xp = Math.max(0, +s.xp || 0); s.reviews = +s.reviews || 0;
   for (const k of ['charlas', 'bought', 'breaks', 'gamesWon', 'stories', 'pron', 'freezes', 'seen']) s[k] = +s[k] || 0;
   /* v1 → v2: стартовый кошелёк за уже набранный опыт, полные силы */
@@ -1456,7 +1709,7 @@ function tripSwap(o, from, to) {
   const r = Object.assign({}, o), d = DEF(), cur = {}, nx = (o.trips && o.trips[to]) || {};
   TRIP_KEYS.forEach(k => { cur[k] = o[k]; r[k] = nx[k] !== undefined ? nx[k] : d[k]; });
   r.trips = Object.assign({}, o.trips, { [from]: cur }); delete r.trips[to];
-  for (const k of ['lessons', 'cards', 'parts', 'miradores', 'postales', 'ach', 'media']) if (!r[k] || typeof r[k] !== 'object' || Array.isArray(r[k])) r[k] = {};
+  for (const k of ['lessons', 'cards', 'practice', 'parts', 'miradores', 'postales', 'ach', 'media']) if (!r[k] || typeof r[k] !== 'object' || Array.isArray(r[k])) r[k] = {};
   r.xp = Math.max(0, +r.xp || 0); r.reviews = +r.reviews || 0; r.seen = +r.seen || 0; r.tramo = clamp(r.tramo || 1, 1, TRAMOS.length);
   return r;
 }
@@ -1472,61 +1725,67 @@ const SYNC_TXT = {
   cloud: 'Прогресс сохранён в аккаунте: виден и на телефоне, и на ПК.'
 };
 const Sync = {
-  ref: null, mode: 'local', writing: false, again: false, t: null, deferred: null, ready: false,
-  /* Первый серверный снимок получен (или облака нет): до этого ничего не пишем, иначе устаревшая копия затрёт облако */
-  markReady() { if (this.ready) return; this.ready = true; protectStreak(); },
+  ref: null, mode: 'local', writing: false, again: false, t: null, deferred: null,
+  /* Синхронизация v2 (2026-11-06; находки ревью ST-01, AX-01, SE-01, AX-02). Раньше побеждал документ с более поздним updatedAt
+     целиком, и устаревшее устройство затирало облачный прогресс. Теперь: B — база, последняя версия, общая с облаком (хранится в
+     LKEY + '-base'); first — пришёл первый серверный снимок, до него в облако не пишем; cat — updatedAt версии, лежащей в облаке;
+     чужая версия не заменяет локальную, а сливается с ней (mergeState). Разбор снимка, слияние и запись — функции syncSnap,
+     syncTake, syncFlush в конце скрипта. Проверка: node tools/sync-test.mjs */
+  B: baseLoad(), first: false, rdy: false, want: false, sent: null, parent: null, seenAt: 0, cat: 0,
+  get Bat() { return (this.B && +this.B.updatedAt) || 0; },
   async init() {
-    const c = window.claude;
-    if (!c || typeof c.use !== 'function') return this.set('local');
+    const c = window.pasaporteCloud || window.claude;
+    if (!c || typeof c.use !== 'function') { this.set('local'); this.ready(); return; }
     this.set('wait');
-    let user, db;
-    try { [user, db] = await Promise.all([c.use('user'), c.use('db')]); } catch { return this.set('local'); }
-    if (!user || !db) return this.set('local');
-    let id; try { id = await user.id(); } catch { return this.set('local'); }
-    if (!id) return this.set('local');
-    try { this.ref = db.doc('data/users/' + id + '/progress'); } catch { return this.set('local'); }
-    let confirmed = false;
-    const timer = setTimeout(() => { if (!confirmed) this.set('slow'); }, 10000);
-    this.ref.onSnapshot(snap => {
-      if (snap.metadata.hasPendingWrites) return;
-      if (!snap.metadata.fromCache) { confirmed = true; clearTimeout(timer); this.set('cloud'); }
-      const d = snap.exists ? snap.data() : null;
-      const remoteAt = (d && +d.updatedAt) || 0;
-      if (d && remoteAt > (S.updatedAt || 0)) this.apply((d.trip || 'ar') === TRIP_ID ? toMem(normalize(d)) : normalize(d));
-      else if (!snap.metadata.fromCache && (S.updatedAt || 0) > remoteAt) this.soon(0);
-      if (!snap.metadata.fromCache) this.markReady();
-    },() => { clearTimeout(timer); this.ref = null; this.set('local'); });
+    const off = () => { this.set('local'); this.ready(); };
+    let user, db, id;
+    try { [user, db] = await Promise.all([c.use('user'), c.use('db')]); } catch { return off(); }
+    if (!user || !db) return off();
+    try { id = await user.id(); } catch { return off(); }
+    if (!id) return off();
+    try { this.ref = db.doc('data/users/' + id + '/progress'); } catch { return off(); }
+    const timer = setTimeout(() => { if (!this.first) { this.set('slow'); this.ready(); } }, 10000);
+    this.ref.onSnapshot(snap => { if (snap && snap.metadata && !snap.metadata.fromCache) clearTimeout(timer); syncSnap(snap); },
+      () => { clearTimeout(timer); this.ref = null; this.set('local'); this.ready(); });
   },
-  apply(next) {
-    /* С другого устройства пришла другая поездка: данные движка другие — сохранить и перезагрузиться */
-    if ((next.trip || 'ar') !== TRIP_ID) { try { localStorage.setItem(LKEY, JSON.stringify(next)); } catch {} location.reload(); return; }
-    if (LS || RS || MS) { this.deferred = next; return; } S = next; saveLocal(); render();
+  /* Защита серии (выходной, amuleto) — на настоящем состоянии: после первого серверного снимка, отказа облака или 10 с ожидания */
+  ready() { if (this.rdy) return; this.rdy = true; protectStreak(); if (!LS && !MS && !RS) render(); },
+  setBase(x) {
+    this.B = JSON.parse(JSON.stringify(x));
+    try {
+      localStorage.setItem(LKEY + '-base', JSON.stringify(this.B));
+      if (this.sent && x.syncRev === this.sent.syncRev) localStorage.setItem(LKEY + '-parent', JSON.stringify(this.parent));
+      else localStorage.removeItem(LKEY + '-parent');
+    } catch {}
   },
-  applyDeferred() { const d = this.deferred; this.deferred = null; if (d && (d.updatedAt || 0) > (S.updatedAt || 0)) { S = d; saveLocal(); } },
-  soon(ms = 1200) { if (!this.ref) return; clearTimeout(this.t); this.t = setTimeout(() => { this.t = null; this.flush(); }, ms); }, flushNow() { if (!this.ref || !this.t) return Promise.resolve(); clearTimeout(this.t); this.t = null; return this.flush(); },
-  async flush() {
-    if (!this.ref) return;
-    if (this.writing) { this.again = true; return; }
-    this.writing = true;
-    try { await this.ref.set(JSON.parse(JSON.stringify(toStore(S)))); if (this.mode !== 'cloud') this.set('cloud'); }
-    catch (e) {
-      const code = e && e.code;
-      if (code === 'unavailable' || code === 'resource_exhausted') setTimeout(() => this.flush(), 2000 + Math.random() * 2000);
-      else { this.ref = null; this.set('local'); }
+  /* Версия из облака, пришедшая во время урока, повторения или окна, ждёт в deferred и принимается при выходе */
+  applyDeferred() { const d = this.deferred; this.deferred = null; if (d) syncTake(d); if (this.first && !this.deferred) this.ready(); if (this.want && !this.deferred) { this.want = false; this.soon(0); } },
+  soon(ms = 1200) { if (!this.ref) return; clearTimeout(this.t); this.t = setTimeout(() => { this.t = null; this.flush(); }, ms); }, flushNow() { if (!this.ref || !this.t) return; clearTimeout(this.t); this.t = null; this.flush(); },
+  flush() { return syncFlush(); },
+  /* Свежее состояние облака перед действием, которое может записать прогресс (возврат на вкладку): fn — после ответа или через 4 с */
+  async pull() { const snap = await this.ref.get(); if (snap && snap.metadata && !snap.metadata.fromCache) syncSnap(snap); },
+  fresh(fn) {
+    if (!this.ref) { if (this.mode !== 'wait') fn(); return; }
+    if (!this.first) { if (this.rdy) fn(); return; }
+    let done = false; const go = () => { if (!done) { done = true; fn(); } };
+    setTimeout(go, 4000); this.pull().then(go, go);
+  },
+  message() {
+    if (window.pasaporteCloud && this.mode === 'cloud') {
+      if (S.updatedAt > this.Bat) return 'Сохранено в браузере. Ожидаю подтверждения сервера…';
+      return 'Прогресс сохранён на сервере. Можно продолжить на другом устройстве.';
     }
-    this.writing = false;
-    if (this.again) { this.again = false; this.flush(); }
+    return SYNC_TXT[this.mode];
   },
-  set(m) { this.mode = m; const el = $('#sync-text'); if (el) el.textContent = SYNC_TXT[m]; if (m === 'local') this.markReady(); }
+  set(m) { this.mode = m; const el = $('#sync-text'); if (el) el.textContent = this.message(); }
 };
-function commit() { S.updatedAt = Date.now(); saveLocal(); Sync.soon(); }
+function commit() { S.updatedAt = Math.max(Date.now(), (+S.updatedAt || 0) + 1, Sync.Bat + 1, Sync.cat + 1); saveLocal(); Sync.soon(); if (window.pasaporteCloud) Sync.set(Sync.mode); } // версия всегда новее известных: часы устройств могут расходиться
 /* Сменить поездку: прогресс активной — в S.trips, выбранной — наверх (или с нуля), запись в облако, перезагрузка */
 function switchTrip(id) {
   if (id === TRIP_ID || !TRIPS.includes(id) || (id !== 'ar' && !$('#lessons-' + id))) return;
-  const st = toStore(S); st.trip = id; st.updatedAt = Date.now();
-  try { localStorage.setItem(LKEY, JSON.stringify(st)); } catch {}
-  const go = () => location.reload();
-  if (Sync.ref) Sync.ref.set(JSON.parse(JSON.stringify(st))).then(go, go); else go();
+  S.trip = id; commit();
+  /* После загрузки выбранной поездки Sync продолжит обмен с той же сохранённой базой. */
+  location.reload();
 }
 function addXP(n) { S.xp += n; const t = today(); S.days[t] = (S.days[t] || 0) + n; }
 
@@ -1546,7 +1805,7 @@ function streak() {
 }
 /* Amuleto: пропущенный вчерашний день закрывается сам, если есть амулет — серия не ломается */
 function protectStreak() {
-  if (!Sync.ready) return;
+  if (!Sync.rdy) return;
   const y = new Date(); y.setDate(y.getDate() - 1); const b = new Date(); b.setDate(b.getDate() - 2);
   const yk = today(y), bk = today(b);
   if (S.days[yk] > 0 || S.frozen[yk] || !(S.days[bk] > 0 || S.frozen[bk])) return;
@@ -2012,15 +2271,27 @@ function companionFor(l) {
   // попутчик только когда его ответы почти целиком из пройденного (≥ 70 %): на первых остановках разговор — один диалог урока
   return best < .7 ? null : pick(sc.filter(x => x[1] >= .7).map(x => x[0])); // любой из подходящих — для разнообразия
 }
+/* Ошибку сохраняем до следующего захода: подсказка или повтор в том же занятии её не снимает. */
+function recordPractice(key, ok) {
+  if (!LS.practiceErrors) LS.practiceErrors = new Set();
+  if (!ok) LS.practiceErrors.add(key);
+  const at = Math.max(Date.now(), (S.practice[key]?.at || 0) + 1);
+  S.practice[key] = { at, wrong: LS.practiceErrors.has(key) };
+}
+function practiceOrder(words) {
+  const rank = w => S.practice[w.key]?.wrong ? 0 : S.practice[w.key]?.at ? 2 : 1;
+  return shuffle(words).sort((a, b) => rank(a) - rank(b)
+    || (S.practice[a.key]?.at || 0) - (S.practice[b.key]?.at || 0));
+}
 function buildQueue(l, part) {
   const q = [];
   if (part.id === 'palabras') {
-    const ws = shuffle(l.words).slice(0, Math.min(l.words.length, 8));
+    const ordered = practiceOrder(l.words), ws = ordered.slice(0, 8);
     const types = ['es2ru', 'ru2es', TTS.ok ? 'listen' : 'es2ru', 'type'];
     ws.forEach((w, i) => { let t = types[i % 4]; if (t === 'type' && w.es.length > 16) t = 'ru2es'; q.push({ t, w }); });
-    if (l.words.length >= 5) q.splice(Math.min(5, q.length), 0, { t: 'match', ws: shuffle(l.words).slice(0, 5) });
+    if (l.words.length >= 5) q.splice(Math.min(5, q.length), 0, { t: 'match', ws: ordered.slice(8).concat(ws).slice(0, 5) });
     /* Правила чтения: 1–2 слова остановки «как читается?» */
-    if (!IS_US) shuffle(l.words.filter(w => pronWrongs(w).length >= 2)).slice(0, l.id === 'l2' ? 2 : 1).forEach((w, i) => q.splice(Math.min(q.length, 3 + i * 6), 0, { t: 'pron', w }));
+    if (!IS_US) ordered.filter(w => pronWrongs(w).length >= 2).slice(0, l.id === 'l2' ? 2 : 1).forEach((w, i) => q.splice(Math.min(q.length, 3 + i * 6), 0, { t: 'pron', w }));
     q.push(...mixItems(l, 3, 'mix'));
     q.push({ t: 'event', kind: 'kiosk' });
   } else if (part.id === 'frases') {
@@ -2337,6 +2608,7 @@ ovTrip(PRAISE, 'praise');
 function answer(ok, fb) {
   if (LS.answered) return; LS.answered = true;
   const it = LS.q[LS.pos];
+  if (it.w) recordPractice(it.w.key, ok);
   if (ok) {
     LS.combo++; LS.best = Math.max(LS.best, LS.combo); LS.xp += 10 + Math.min(LS.combo - 1, 5) * 2; SFX.ok(); vib(12);
     /* mangos: 1 за ответ, серия +1/+2, contento +1; усталый — без бонусов; повторный урок — половина */
@@ -2351,7 +2623,8 @@ function answer(ok, fb) {
     if (!LS.detour && LS.mistakes > nivel().lim) LS.wrongBus = true;
     if (!it.retry && it.t !== 'match' && it.t !== 'dialog') { LS.q.push(Object.assign({}, it, { retry: true })); LS.total++; }
   }
-  feel(-ECO.exEnergy, -ECO.exMood); saveLocal();
+  feel(-ECO.exEnergy, -ECO.exMood);
+  if (it.w) commit(); else saveLocal();
   LS.done++; updateTop(); showFeedback(ok, fb);
 }
 function showFeedback(ok, fb) {
@@ -2431,7 +2704,11 @@ function tapMatch(btn) {
     st.sel = btn; btn.classList.add('sel'); SFX.tap(); return;
   }
   const a = st.sel; st.sel = null; a.classList.remove('sel');
-  if (a.dataset.m === btn.dataset.m) {
+  const matched = a.dataset.m === btn.dataset.m;
+  recordPractice(a.dataset.m, matched);
+  if (!matched) recordPractice(btn.dataset.m, false);
+  commit();
+  if (matched) {
     [a, btn].forEach(x => { x.classList.add('matched'); x.disabled = true; });
     st.done++; SFX.tap(); vib(8);
     if (st.done === it.ws.length) answer(true, { main: st.errs ? `Все пары собраны, ошибок: ${st.errs}` : 'Все пары собраны без ошибок' });
@@ -2624,7 +2901,8 @@ function viewStats() {
         <label for="goal">Цель дня<select id="goal">${[30, 50, 100, 150].map(g => `<option value="${g}" ${S.settings.goal === g ? 'selected' : ''}>${g} XP</option>`).join('')}</select></label>
         <label for="nivel">${T('Nivel')} · сложность урока<select id="nivel">${Object.entries(NIVELES).map(([k, v]) => `<option value="${k}" ${S.settings.nivel === k ? 'selected' : ''}>${v.es} — ${v.ru}</option>`).join('')}</select></label>
         <p class="hint">Ошибок больше лимита — автобус сворачивает на ${T('Parada de repaso')}: пройди её, и поедем дальше; опыт и карточки сохраняются. ${T('Difícil')}: ставка ${ECO.apuesta} ${T('mangos')}, при первой ошибке предыдущая остановка закрывается заново.</p>
-        <div class="sync">${ICON.cloud}<span id="sync-text">${SYNC_TXT[Sync.mode]}</span></div>
+        <div class="sync">${ICON.cloud}<span id="sync-text">${Sync.message()}</span></div>
+        ${window.pasaporteDevices ? '<button type="button" class="btn tonal" data-link-devices>Связать устройства</button>' : ''}
         <p class="hint">Позвать ещё ученика: поделитесь этой страницей — у каждого будет свой прогресс.</p>
         <div id="reset-box"><button class="danger" data-act="reset">Сбросить весь прогресс</button></div>
       </div></section>`;
@@ -4408,7 +4686,7 @@ document.addEventListener('click', e => {
     case 'test-voice': TTS.speak(T('¿Cómo andás, che? Me llamo Román. ¡Todo re bien!')); return;
     case 'reset': $('#reset-box').innerHTML = `<div class="confirm"><p>Стереть опыт, остановки и карточки? Это нельзя отменить.</p><div><button class="btn ghost" data-act="reset-no">Оставить</button><button class="btn warn" data-act="reset-yes">Стереть</button></div></div>`; return;
     case 'reset-no': render(); return;
-    case 'reset-yes': { const keep = S.settings; S = DEF(); S.settings = keep; commit(); toast('Прогресс сброшен'); render(); return; }
+    case 'reset-yes': { const keep = S.settings, ra = Math.max(Date.now(), (+S.resetAt || 0) + 1); S = DEF(); S.trip = TRIP_ID; S.settings = keep; S.resetAt = ra; commit(); toast('Прогресс сброшен'); render(); return; }
   }
 });
 document.addEventListener('change', e => {
@@ -4433,7 +4711,7 @@ document.addEventListener('keydown', e => {
   }
 });
 if (location.hash === '#lab') view = 'lab';
-regaloCheck(); tick(); protectStreak();
+regaloCheck(); tick(); if (!window.pasaporteCloud && !(window.claude && typeof window.claude.use === 'function')) { Sync.rdy = true; protectStreak(); } // с облаком защита серии ждёт первого снимка (Sync.ready)
 render();
 /* Бездействие на главном экране (AFK): ступени 60 с / 2 мин / 3 мин, любое касание будит. Не в уроке и не в окнах. */
 let AFK_LAST = Date.now(), AFK_STAGE = 0;
@@ -4480,7 +4758,157 @@ function passportHTML() {
 }
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-trip]'); if (!b) return; if (LS || RS) { toast('Сначала закончи урок'); return; } b.disabled = true; switchTrip(b.dataset.trip); });
 Sync.init(); initSample();
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { regaloCheck(); tick(); protectStreak(); if (!LS && !MS && !RS) render(); } else Sync.flushNow(); }); window.addEventListener('pagehide', () => Sync.flushNow());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { regaloCheck(); tick(); if (!LS && !MS && !RS) render(); Sync.fresh(() => { const u = S.updatedAt; protectStreak(); if (S.updatedAt !== u && !LS && !MS && !RS) render(); }); } else Sync.flushNow(); }); window.addEventListener('pagehide', () => Sync.flushNow());
+/* ---------- Синхронизация v2: снимок облака, слияние, запись (объект Sync — выше, перед commit) ---------- */
+/* База — версия прогресса, про которую известно, что она есть и здесь, и в облаке. Сохранённой нет — базой считаем состояние при загрузке. */
+function baseLoad() {
+  try { const b = JSON.parse(localStorage.getItem(LKEY + '-base') || 'null'); if (b && typeof b === 'object' && !Array.isArray(b)) return normalize(b); } catch {}
+  return JSON.parse(JSON.stringify(toStore(S)));
+}
+/* Строка значения с ключами по алфавиту: сравнение не зависит от порядка полей */
+function syncStr(v) { return JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { o[key] = x[key]; return o; }, {}) : x); }
+/* Состояние без полей, которые меняются сами (время, силы, подарок): так видно, добавило ли слияние что-то к облачной версии */
+function syncCanon(s) { const y = Object.assign({}, s); for (const k of ['updatedAt', 'syncRev', 'syncParent', 'seen', 'energy', 'mood', 'regalo']) delete y[k]; return syncStr(y); }
+/* Снимок документа из облака (слушатель onSnapshot и чтение get) */
+function versionedWrite(s) {
+  return typeof s.syncRev === 'string' && s.syncRev.startsWith(s.updatedAt + ':');
+}
+function syncRevision(s) { return s && (versionedWrite(s) ? s.syncRev : String(+s.updatedAt || 0)); }
+function syncSnap(snap) {
+  if (!snap || !snap.metadata || snap.metadata.hasPendingWrites) return;
+  const server = !snap.metadata.fromCache, d = snap.exists ? snap.data() : null, at = (d && +d.updatedAt) || 0;
+  if (server) { Sync.seenAt = Date.now(); Sync.cat = at; if (Sync.mode !== 'cloud') Sync.set('cloud'); }
+  if (d && Sync.sent && syncRevision(d) === syncRevision(Sync.sent)) { if (syncRevision(d) !== syncRevision(Sync.B)) Sync.setBase(Sync.sent); }   // эхо собственной записи
+  else if (d && syncRevision(d) !== syncRevision(Sync.B) && (server || at > Sync.Bat)) syncTake(normalize(d));                          // облако ушло вперёд или откатилось
+  if (server && !Sync.first) { Sync.first = true; if (!Sync.deferred) Sync.ready(); }
+  if (server && !Sync.deferred && (S.updatedAt || 0) > at) Sync.soon(0);                                       // здесь есть то, чего нет в облаке
+}
+/* Принять версию из облака. Она не заменяет локальную, а сливается с ней; если слияние ничего не добавило — берём облачную как есть. */
+function syncTake(r) {
+  if (LS || RS || MS) { Sync.deferred = r; return; }
+  const at = +r.updatedAt || 0; if (syncRevision(r) === syncRevision(Sync.B)) return;
+  const local = toStore(S);
+  /* Два устройства могли подтвердить записи, сделанные от одной базы. Даже при совпадении
+     updatedAt это разные ответы. Считаем обе прибавки от их общего родителя. */
+  let baseline = at >= Sync.Bat ? Sync.B : r;
+  if (versionedWrite(r) && r.syncParent && r.syncParent === Sync.B.syncParent) {
+    let parent = Sync.parent;
+    if (syncRevision(parent) !== r.syncParent) {
+      try { parent = JSON.parse(localStorage.getItem(LKEY + '-parent')); } catch {}
+    }
+    if (syncRevision(parent) === r.syncParent) baseline = parent;
+  }
+  const m = mergeState(baseline, local, r);
+  const same = syncCanon(m) === syncCanon(r);
+  const stored = same ? r : m; if (!same) stored.updatedAt = Math.max(Date.now(), at + 1, Sync.Bat + 1, (+S.updatedAt || 0) + 1);   // версия слияния новее всех известных, даже если часы устройств расходятся
+  Sync.setBase(r); S = toMem(stored); saveLocal();
+  if (stored.trip !== TRIP_ID) { location.reload(); return; }
+  regaloCheck(); tick();
+  if (Sync.rdy && !LS && !MS && !RS) render();
+  if (!same) Sync.soon(0);
+}
+/* Запись в облако: только после первого серверного снимка, не поверх непринятой чужой версии и только если здесь есть новое */
+async function syncFlush() {
+  if (!Sync.ref) return;
+  if (!Sync.first || Sync.deferred) { Sync.want = true; return; }
+  if (Sync.writing) { Sync.again = true; return; }
+  Sync.writing = true;
+  try {
+    if (Date.now() - Sync.seenAt > 15000) { try { await Sync.pull(); } catch (e) {} }   // давно не слышали облако — сначала читаем: вдруг другое устройство ушло вперёд
+    if (Sync.deferred) Sync.want = true;
+    else if (Sync.ref && (S.updatedAt || 0) > Sync.cat) {
+      const out = JSON.parse(JSON.stringify(toStore(S)));
+      out.syncRev = out.updatedAt + ':' + Array.from(globalThis.crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8, '0')).join('');
+      out.syncParent = syncRevision(Sync.B);
+      Sync.parent = Sync.B; Sync.sent = out;
+      await Sync.ref.set(out);
+      Sync.cat = Math.max(Sync.cat, +out.updatedAt || 0); Sync.seenAt = Date.now();
+      if ((+out.updatedAt || 0) > Sync.Bat) Sync.setBase(out);
+      if (Sync.mode !== 'cloud') Sync.set('cloud');
+    }
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'unavailable' || code === 'resource_exhausted') setTimeout(() => Sync.flush(), 2000 + Math.random() * 2000);
+    else { Sync.ref = null; Sync.set('local'); }
+  }
+  Sync.writing = false;
+  if (window.pasaporteCloud) Sync.set(Sync.mode);
+  if (Sync.again) { Sync.again = false; Sync.flush(); }
+}
+/* Слияние прогресса: b — база (последняя общая версия), l — локальное состояние, r — облачное. Основа результата — облачная версия,
+   поверх кладётся то, что изменилось здесь после базы: счётчики складываются (облако + (здесь − база)), опыт и число действий не
+   уменьшаются; остановки, отрезки, карточки, вещи, открытки и ачивки объединяются; у карточки побеждает более свежее повторение;
+   настройки, одежда, детур и разовые отметки берутся локальные, только если менялись здесь. Сброс прогресса (resetAt) побеждает целиком. */
+function mergeState(b, l, r) {
+  const merged = mergeProgress(b, l, r);
+  if (merged.resetAt > (b && b.resetAt || 0)) return normalize(merged);
+  /* Аргентина хранится в корне; у каждой другой поездки независимо сливаются только её поля. */
+  merged.trips = {};
+  for (const id of new Set([...Object.keys(l.trips || {}), ...Object.keys(r.trips || {})])) {
+    const left = l.trips && l.trips[id], right = r.trips && r.trips[id];
+    if (!left || !right) { merged.trips[id] = JSON.parse(JSON.stringify(left || right)); continue; }
+    const progress = mergeProgress(b && b.trips && b.trips[id], left, right, versionedWrite(r));
+    merged.trips[id] = Object.fromEntries(TRIP_KEYS.filter(k => progress[k] !== undefined).map(k => [k, progress[k]]));
+  }
+  return normalize(merged);
+}
+function mergeProgress(b, l, r, versioned = versionedWrite(r)) {
+  const num = v => +v || 0, obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {}), copy = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  b = obj(b);
+  if (num(r.resetAt) > num(b.resetAt) && num(r.resetAt) >= num(l.resetAt)) return copy(r);
+  if (num(l.resetAt) > num(b.resetAt)) return copy(l);
+  const o = copy(r), add = k => num(r[k]) + num(l[k]) - num(b[k]);
+  for (const k of ['xp', 'reviews', 'charlas', 'bought', 'breaks', 'gamesWon', 'stories', 'pron']) o[k] = Math.max(add(k), num(l[k]), num(r[k]));
+  for (const k of ['mangos', 'estrellas', 'freezes']) o[k] = Math.max(0, add(k));
+  for (const k of ['energy', 'mood']) o[k] = clamp(add(k), 0, 100);
+  for (const k of ['seen', 'tramo', 'v']) o[k] = Math.max(num(r[k]), num(l[k]));
+  if (num(l.libreAt) > num(r.libreAt)) o.libreAt = l.libreAt;
+  /* счётчики по ключам: опыт по дням, число прослушиваний */
+  for (const k of ['days', 'media']) { o[k] = obj(o[k]); const lb = obj(b[k]); for (const [d, v] of Object.entries(obj(l[k]))) { const x = Math.max(num(o[k][d]) + num(v) - num(lb[d]), num(v), num(o[k][d])); if (x !== num(o[k][d])) o[k][d] = x; } }
+  /* объединения: запись есть хотя бы на одном устройстве — остаётся; при совпадении ключа верим облаку */
+  for (const k of ['ach', 'postales', 'miradores', 'inv', 'frozen']) { o[k] = obj(o[k]); for (const [d, v] of Object.entries(obj(l[k]))) if (!o[k][d]) o[k][d] = v; }
+  o.practice = obj(o.practice);
+  for (const [k, x] of Object.entries(obj(l.practice))) {
+    const y = o.practice[k];
+    if (!y || x.at > y.at || (x.at === y.at && x.wrong)) o.practice[k] = copy(x);
+  }
+  o.cards = obj(o.cards);
+  for (const [k, c] of Object.entries(obj(l.cards))) { const y = o.cards[k], cl = num(obj(c).last), yl = num(obj(y).last); if (!y || cl > yl || (cl === yl && num(obj(c).reps) > num(obj(y).reps))) o.cards[k] = copy(c); }
+  o.lessons = obj(o.lessons);
+  for (const [id, x] of Object.entries(obj(l.lessons))) {
+    const y = o.lessons[id]; if (!y) { o.lessons[id] = copy(x); continue; }
+    const stars = Math.max(num(obj(y).stars), num(obj(x).stars)), runs = Math.max(num(obj(y).runs), num(obj(x).runs));
+    if (stars !== num(obj(y).stars) || runs !== num(obj(y).runs)) o.lessons[id] = Object.assign({}, obj(y), { stars, runs });
+  }
+  o.parts = obj(o.parts);
+  for (const [id, ps] of Object.entries(obj(l.parts))) {
+    if (!o.parts[id]) { o.parts[id] = copy(ps); continue; }
+    for (const [p, x] of Object.entries(obj(ps))) {
+      const y = o.parts[id][p]; if (!y) { o.parts[id][p] = copy(x); continue; }
+      const stars = Math.max(num(obj(y).stars), num(obj(x).stars)), at = Math.max(num(obj(y).at), num(obj(x).at));
+      if (stars !== num(obj(y).stars) || at !== num(obj(y).at)) o.parts[id][p] = Object.assign({}, obj(y), { stars, at });
+    }
+  }
+  /* На difícil остановка снова закрывается. Удаление побеждает неизменённую запись;
+     пропуск в старом облачном формате без истории версий мог быть устаревшей копией. */
+  for (const k of ['lessons', 'parts']) {
+    for (const [id, original] of Object.entries(obj(b[k]))) {
+      const local = obj(l[k])[id], remote = obj(r[k])[id];
+      if ((!local && syncStr(remote) === syncStr(original)) ||
+          (versioned && !remote && syncStr(local) === syncStr(original))) delete o[k][id];
+    }
+  }
+  o.games = obj(o.games);
+  for (const [id, g] of Object.entries(obj(l.games))) {
+    const y = o.games[id], z = obj(obj(b.games)[id]); if (!y) { o.games[id] = copy(g); continue; }
+    const best = Math.max(num(obj(y).best), num(obj(g).best)), plays = Math.max(num(obj(y).plays) + num(obj(g).plays) - num(z.plays), num(obj(g).plays), num(obj(y).plays));
+    if (best !== num(obj(y).best) || plays !== num(obj(y).plays)) o.games[id] = Object.assign({}, obj(y), { best, plays });
+  }
+  /* остальное (настройки, одежда, «моё место», детур, подсказки, разовые отметки дня): менялось здесь после базы — локальное, иначе облачное */
+  const done = { syncRev: 1, syncParent: 1, trips: 1, practice: 1, v: 1, updatedAt: 1, resetAt: 1, xp: 1, reviews: 1, charlas: 1, bought: 1, breaks: 1, gamesWon: 1, stories: 1, pron: 1, mangos: 1, estrellas: 1, freezes: 1, energy: 1, mood: 1, seen: 1, tramo: 1, libreAt: 1, days: 1, media: 1, ach: 1, postales: 1, miradores: 1, inv: 1, frozen: 1, cards: 1, lessons: 1, parts: 1, games: 1 };
+  for (const k of new Set([...Object.keys(l), ...Object.keys(b)])) { if (done[k]) continue; if (syncStr(l[k]) !== syncStr(b[k])) { if (l[k] === undefined) delete o[k]; else o[k] = copy(l[k]); } }
+  return o;
+}
 })();
 </script>
 <script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script></body></html>
