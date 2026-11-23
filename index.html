@@ -981,21 +981,30 @@ h1, h2 { text-wrap: balance; margin: 0; }
 .psp-menu header, .psp-details, .psp-current { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .psp-menu h1.pg, .psp-current h2.sec { margin: 0; }
 .psp-hint { margin: -8px 0 0; color: var(--muted); }
-.psp-ticket { overflow: hidden; border: 1px solid var(--outline); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh1); }
-.psp-window { position: relative; display: block; width: 100%; height: clamp(104px, 21vw, 148px); overflow: hidden; border: 0; background: #28252b; color: #392d26; padding: 0; text-align: left; cursor: pointer; }
-.psp-window:focus-visible { outline: 3px solid var(--celeste); outline-offset: -3px; }
-.psp-art, .psp-banner { display: block; width: 100%; height: 100%; }
-.psp-banner { object-fit: contain; image-rendering: pixelated; }
-.psp-slip { position: absolute; inset: 4px 16px 4px 4px; display: flex; align-items: stretch; background: #f5e3c7; color: #382a24; border-block: 3px double #926d5c; box-shadow: 4px 3px 0 #46352d80; will-change: transform; transition: transform .34s ease-out; }
-.psp-ticket[data-ticket="ar"] .psp-slip { background: #dce8dc; border-color: #698883; color: #203e44; }
-.psp-print { display: flex; flex: 1; min-width: 0; padding: 10px clamp(12px,4vw,30px); flex-direction: column; justify-content: center; gap: 4px; }
-.psp-print strong { font: bold clamp(1.65rem,6vw,3rem)/1.05 Georgia,serif; }
-.psp-print > span { font: 500 clamp(.75rem,2.6vw,.95rem)/1.2 var(--f-body); }
-.psp-stub { position: relative; display: grid; place-items: center; width: clamp(39px,11vw,76px); border-left: 2px dashed currentColor; font: bold 1rem monospace; }
-.psp-stub::before,.psp-stub::after { content: ''; position: absolute; left: -8px; width: 14px; height: 14px; border-radius: 50%; background: #28252b; }
-.psp-stub::before { top:-9px; } .psp-stub::after { bottom:-9px; }
-.psp-window[aria-expanded="true"] .psp-slip { transform: translateX(101%); }
-@media (hover:hover) and (pointer:fine) { .psp-window:hover .psp-slip { transform: translateX(101%); } }
+.psp-ticket { container-type:inline-size; --paper:#f8f1df; --red:#963d30; --green:#254a44; --serif:Georgia,serif; --mono:Consolas,monospace; --sans:var(--f-body); }
+.psp-destination { font:bold clamp(10px,2.4cqw,15px)/1.2 var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.psp-stub { touch-action:pan-y; }
+.psp-window:focus-visible { outline:3px solid var(--celeste); outline-offset:2px; }
+.psp-window { position:relative; width:100%; padding:0; text-align:left; cursor:pointer; display:block; isolation:isolate; overflow:hidden; min-height:clamp(126px,31cqw,177px); border:1px solid #a68e67; border-radius:6px; background:#273e3a; box-shadow:0 2px 0 #beae90 }
+.psp-window .psp-banner { position:absolute; inset:0; width:100%; height:100%; object-fit:cover }
+.psp-slip,.psp-stub { position:absolute; top:0; bottom:0; transition:transform .5s cubic-bezier(.22,.72,.25,1); }
+.psp-slip { left:0; width:78%; background:#f5e4c4; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:5px; padding:10px 4%; color:#452e23; border-block:5px solid #974e39 }
+.psp-window.psp-ar .psp-slip { background:#e2e7d4; color:#293f38; border-color:#426a60 }
+.psp-slip .psp-destination { color:var(--red) }.psp-window.psp-ar .psp-slip .psp-destination { color:var(--green) }
+.psp-slip strong { font:italic bold clamp(29px,7.8cqw,55px)/1.02 var(--serif); letter-spacing:-.075em }
+.psp-slip .psp-info { margin-top:5px; color:#4d493d }
+.psp-stub { width:22%; right:0; border-left:2px dashed #8d6b49; display:flex; align-items:center; flex-direction:column; justify-content:center; gap:8px; background:#ddb887; color:#493321; box-shadow:-2px 0 3px #57331b22; transform-origin:50% 90% }
+.psp-window.psp-ar .psp-stub { background:#afc2a9; color:#2c4838; border-color:#637d65 }
+.psp-stub:before,.psp-stub:after { content:""; position:absolute; width:14px; height:14px; background:var(--paper); border-radius:50%; left:-8px }
+.psp-stub:before { top:-9px }.psp-stub:after { bottom:-9px }
+.psp-barcode { height:26px; width:55%; max-width:65px; background:repeating-linear-gradient(90deg,currentColor 0 2px,transparent 2px 3px,currentColor 3px 4px,transparent 4px 6px,currentColor 6px 9px,transparent 9px 12px); opacity:.9 }
+.psp-tear { font:bold clamp(9px,2.15cqw,13px)/1.2 var(--mono); text-transform:uppercase; letter-spacing:.03em }
+.psp-window:hover:not([aria-expanded=true]) .psp-stub { transform:translateX(5px) rotate(2deg) }
+.psp-window.psp-dragging .psp-slip { transition:none; transform:translateX(var(--cover-shift)) }
+.psp-window.psp-dragging .psp-stub { transition:none; transform:translateX(var(--stub-shift)) }
+.psp-window[aria-expanded=true] .psp-slip { transform:translateX(-104%) rotate(-2deg) }
+.psp-window[aria-expanded=true] .psp-stub { transform:translateX(112%) rotate(7deg) }
+.psp-ticket-reveal { position:absolute; left:8px; bottom:6px; display:flex; align-items:center; gap:6px; background:#182722dc; color:white; border:1px solid #f8ebcead; border-radius:2px; padding:3px 7px; font:600 12px/1.3 var(--sans) }
 .psp-details { padding: 12px 16px; }
 .psp-details strong { font-size: .98rem; }
 .psp-current p { margin: 2px 0; font-size: .9rem; }
@@ -1004,10 +1013,13 @@ h1, h2 { text-wrap: balance; margin: 0; }
 .psp-menu .btn,.psp-current .btn { min-height: 48px; }
 @media (max-width:360px) { .psp-details { padding: 10px; gap: 6px; } }
 @media (prefers-reduced-motion:reduce) {
-  .psp-slip { transition:none; }
+  .psp-slip,.psp-stub { transition:none; }
   .psp-window[aria-expanded="true"] .psp-slip { transform:none; visibility:hidden; }
 }
-@media (prefers-reduced-motion:reduce) and (hover:hover) and (pointer:fine) { .psp-window:hover .psp-slip { transform:none; visibility:hidden; } }
+@media (hover:hover) and (pointer:fine) {
+  .psp-window:hover:not(.psp-dragging) .psp-slip { transform:translateX(-104%) rotate(-2deg); }
+  .psp-window:hover:not(.psp-dragging) .psp-stub { transform:translateX(112%) rotate(7deg); }
+}
 .trx { display: block; flex-basis: 100%; font: 400 13px/1.3 var(--f-body); color: var(--muted); letter-spacing: 0; text-transform: none; }
 .opt .trx { margin-top: 2px; }
 .q-es .trx { font-size: 20px; margin-top: 6px; }
@@ -4872,17 +4884,18 @@ function tripMenuHTML() {
       const label = started || (!firstTrip && id === TRIP_ID) ? 'Продолжить' : 'Поехать';
       const image = TRIP_BANNERS[id];
       return `<article class="psp-ticket" data-ticket="${id}">
-        <button type="button" class="psp-window" data-trip-peek="${id}" aria-expanded="false" aria-label="Посмотреть маршрут: ${esc(trip.country)}" aria-controls="psp-art-${id}">
+        <button type="button" class="psp-window psp-${id}" data-trip-peek="${id}" aria-expanded="false" aria-label="Посмотреть маршрут: ${esc(trip.country)}" aria-controls="psp-art-${id}">
           <span class="psp-art" id="psp-art-${id}">${image ? `<img class="psp-banner" src="${esc(image)}" alt="${esc(trip.route)}">` : ''}</span>
-          <span class="psp-slip"><span class="psp-print"><strong>${esc(trip.country)}</strong><span>${esc(trip.route)}</span></span>
-          <span class="psp-stub">${id.toUpperCase()}</span></span></button>
-        <div class="psp-details"><div><strong>${esc(trip.ru)}</strong>
+          <span class="psp-ticket-reveal">${esc(trip.route)} · Свернуть ↶</span>
+          <span class="psp-slip psp-print"><span class="psp-destination">${id === 'us' ? 'Нью-Йорк' : 'Патагония'}</span><strong>${esc(trip.country)}</strong><span class="psp-info">${esc(trip.ru)}</span></span>
+          <span class="psp-stub" aria-hidden="true"><span class="psp-barcode"></span><span class="psp-tear">Открыть ›</span></span></button>
+        <div class="psp-details"><div><strong>${esc(trip.route)}</strong>
         <small>${completed} из ${trip.n} остановок${completed >= trip.n ? ' · штамп получен' : ''}</small></div>
         <button type="button" class="btn primary" data-trip="${id}" aria-label="${label} · ${esc(trip.country)}">${label}</button></div></article>`;
     }).join('');
     return `<div class="psp-menu"><header><h1 class="pg" tabindex="-1">Путёвки</h1>
       ${firstTrip ? '' : '<button type="button" class="btn ghost" data-go="stats">Назад</button>'}</header>
-      <p class="psp-hint">Нажмите на билет, чтобы увидеть маршрут.</p>
+      <p class="psp-hint">Нажмите на билет или сдвиньте корешок вправо, чтобы увидеть маршрут.</p>
       ${tickets}${firstTrip && window.pasaporteDevices ? '<button type="button" class="btn tonal" data-link-devices>У меня есть код прогресса</button>' : ''}</div>`;
   }
 function passportHTML() {
@@ -4890,6 +4903,23 @@ function passportHTML() {
     return `<section class="card psp-current"><div><h2 class="sec">${esc(TRIP_INFO[TRIP_ID].country)}</h2><p>${esc(TRIP_INFO[TRIP_ID].ru)}</p></div>
       <button type="button" class="btn tonal" data-trip-menu>Сменить поездку</button></section>`;
   }
+document.addEventListener('pointerdown', e => {
+  const stub = e.target.closest?.('.psp-stub');
+  if (!stub || !e.isPrimary || e.button !== 0) return;
+  const ticket = stub.closest('.psp-window'), start = e.clientX;
+  stub.setPointerCapture(e.pointerId);
+  stub.onpointermove = move => {
+    if (move.pointerId !== e.pointerId) return;
+    const dx = Math.max(0, move.clientX - start);
+    ticket.classList.toggle('psp-dragging', dx > 3);
+    ticket.style.setProperty('--stub-shift', dx + 'px');
+    ticket.style.setProperty('--cover-shift', -Math.min(dx * 2, ticket.clientWidth * .8) + 'px');
+  };
+  stub.onlostpointercapture = () => {
+    ticket.classList.remove('psp-dragging');
+    stub.onpointermove = stub.onlostpointercapture = null;
+  };
+});
 document.addEventListener('click', e => {
   const peek = e.target.closest?.('[data-trip-peek]');
   if (peek) {
